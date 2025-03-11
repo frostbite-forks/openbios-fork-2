@@ -350,6 +350,7 @@ cpu_add_pir_property(void)
     asm("mfspr %0, 1023\n"
         : "=r"(pir) :);
     PUSH(pir);
+    printk("Pir = %lu \n", pir);
     fword("encode-int");
     push_str("reg");
     fword("property");
@@ -383,7 +384,7 @@ cpu_g4_init(const struct cpudef *cpu)
     cpu_generic_init(cpu);
     cpu_add_pir_property();
 
-    fword("finish-device");
+    //fword("finish-device");
 }
 
 #ifdef CONFIG_PPC_64BITSUPPORT
@@ -1073,11 +1074,24 @@ arch_of_init(void)
     push_str("reg");
     fword("property");
 
+for (int i= 0; i<temp; i++) {
     cpu = id_cpu();
     cpu->initfn(cpu);
-    printk("CPU type %s\n", cpu->name);
 
+    printk("CPU type %s\n", cpu->name);
     snprintf(buf, sizeof(buf), "/cpus/%s", cpu->name);
+    PUSH(i);
+    fword("encode-int");
+    push_str("reg");
+    fword("property");
+    if (i!=0){
+        push_str("stopped");
+        fword("encode-string");
+        push_str("state");
+        fword("property");
+        }
+    fword("finish-device");
+}
     ofmem_register(find_dev("/memory"), find_dev(buf));
     node_methods_init(buf);
 
