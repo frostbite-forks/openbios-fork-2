@@ -362,7 +362,7 @@ cpu_604_init(const struct cpudef *cpu)
     cpu_generic_init(cpu);
     cpu_add_pir_property();
 
-    fword("finish-device");
+//    fword("finish-device");
 }
 
 static void
@@ -375,7 +375,7 @@ cpu_750_init(const struct cpudef *cpu)
     push_str("reg");
     fword("property");
 
-    fword("finish-device");
+    //fword("finish-device");
 }
 
 static void
@@ -437,7 +437,7 @@ cpu_970_init(const struct cpudef *cpu)
     push_str("64-bit");
     fword("property");
 
-    fword("finish-device");
+    //fword("finish-device");
 
 #ifdef CONFIG_PPC_64BITSUPPORT
     /* The 970 is a PPC64 CPU, so we need to activate
