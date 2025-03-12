@@ -567,7 +567,7 @@ static const struct cpudef ppc_defs[] = {
         .dcache_block_size = 0x20,
         .tlb_sets = 0x40,
         .tlb_size = 0x80,
-        .initfn = cpu_750_init,
+        .initfn = cpu_g4_init,
     },
     {
         .iu_version = 0x0000c0000,
