@@ -1048,6 +1048,14 @@ int vga_config_cb (const pci_config_t *config)
             /* Install special words for Mac On Linux */
             molvideo_init();
 #endif
+
+            /*
+             * Enable bus mastering so the ATI CCE DMA ring engine can read
+             * command packets from system memory.  The ATI Resource Manager
+             * checks PCI_COMMAND bit 2 before initialising the 3D pipeline;
+             * without it the ARM silently skips hardware 3D registration.
+             */
+            ob_pci_enable_bus_master(config);
         }
 
 	return 0;
