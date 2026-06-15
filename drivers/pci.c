@@ -1048,6 +1048,15 @@ int vga_config_cb (const pci_config_t *config)
             /* Install special words for Mac On Linux */
             molvideo_init();
 #endif
+
+            /*
+             * Enable bus mastering so Mac OS 9's PCI Manager creates a
+             * proper MMIO mapping for BAR2.  Without bit 2 the PCI Manager
+             * treats the device as non-DMA-capable and skips the BAR2
+             * mapping; the ATI Resource Manager then has no MMIO address
+             * and falls back to software rendering.
+             */
+            ob_pci_enable_bus_master(config);
         }
 
 	return 0;
