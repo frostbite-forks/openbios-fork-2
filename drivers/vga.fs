@@ -253,11 +253,17 @@ headerless
 
     frame-buffer-adr encode-int " address" property
 
-    \ AAPL,address: mapped memory BAR addresses (IO BARs excluded, as per
-    \ real ATI FCode ROM convention).  Index 0 = BAR0 (framebuffer),
-    \ index 1 = BAR2 (MMIO registers).  The ATI Resource Manager uses
-    \ index 1 to locate the CCE/PM4 MMIO base for hardware 3D init.
+    \ AAPL,address: three-entry array matching real ATI Rage 128 PCI OF ROM.
+    \ Index 0 = BAR0 (framebuffer), index 1 = 0 (IO BAR not memory-mapped),
+    \ index 2 = BAR2 (MMIO registers).
+    \ The NDRV dereferences index 1 as a kernel virtual address.  On real
+    \ hardware that address is pre-mapped via inherited OF BAT registers;
+    \ in QEMU+OpenBIOS the mapping is not inherited, so index 1 must be 0
+    \ so the NDRV skips the direct-dereference path.  The ARM (ATI Resource
+    \ Manager) then falls back to Mac OS 9 PCI Manager to map BAR2, which
+    \ correctly sets up page-table entries with cache-inhibit+guarded bits.
     frame-buffer-adr encode-int
+    0 encode-int encode+
     mmio-addr encode-int encode+
     " AAPL,address" property
 
