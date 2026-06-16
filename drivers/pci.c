@@ -1013,7 +1013,6 @@ int vga_config_cb (const pci_config_t *config)
             setup_video();
 
 #ifdef CONFIG_PPC
-            int rom_fcode_executed = 0;
             if (config->assigned[6]) {
                     rom = pci_bus_addr_to_host_addr(MEMORY_SPACE_32,
                                                     config->assigned[6] & ~0x0000000F);
@@ -1058,7 +1057,6 @@ int vga_config_cb (const pci_config_t *config)
                                                              "0x%lx 1 byte-load",
                                                              (unsigned long)(rom + fi));
                                                     feval(buf);
-                                                    rom_fcode_executed = 1;
                                                     break;
                                             }
                                     }
