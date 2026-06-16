@@ -157,12 +157,6 @@ static const pci_dev_t eth_devices[] = {
         sungem_config_cb, "ethernet",
     },
     {
-        PCI_VENDOR_ID_APPLE, PCI_DEVICE_ID_APPLE_K2_GMAC,
-        NULL, "ethernet", NULL,  "gmac\0",
-        0, 0, 0,
-        sungem_config_cb, "ethernet",
-    },
-    {
         PCI_VENDOR_ID_SUN, PCI_DEVICE_ID_SUN_HME,
         NULL, "network", NULL, "SUNW,hme\0",
         0, 0, 0,

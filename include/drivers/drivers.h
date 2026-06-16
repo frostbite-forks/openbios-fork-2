@@ -25,7 +25,6 @@ extern int is_oldworld(void);
 extern int is_newworld(void);
 extern int has_pmu(void);
 extern int has_adb(void);
-extern int is_powermac33(void);
 #else
 static inline int is_apple(void)
 {
@@ -44,10 +43,6 @@ static inline int has_pmu(void)
 	return 0;
 }
 static inline int has_adb(void)
-{
-	return 0;
-}
-static inline int is_powermac33(void)
 {
 	return 0;
 }
