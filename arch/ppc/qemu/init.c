@@ -50,6 +50,10 @@ struct cpudef {
 };
 
 static uint16_t machine_id = 0;
+static int powermac33_machine = 0;
+static int smp_cpu_index = -1;
+
+#define PPC_MODEL_POWERMAC33    0x33
 
 extern void unexpected_excep(int vector);
 
@@ -109,6 +113,29 @@ int has_adb(void)
 
     return (via_config == CORE99_VIA_CONFIG_CUDA ||
             via_config == CORE99_VIA_CONFIG_PMU_ADB);
+}
+
+static void
+detect_powermac33(void)
+{
+    uint32_t model;
+
+    if (machine_id != ARCH_MAC99)
+        return;
+
+    model = fw_cfg_read_i32(FW_CFG_PPC_MODEL);
+    if (model == PPC_MODEL_POWERMAC33) {
+        powermac33_machine = 1;
+        return;
+    }
+
+    if (fw_cfg_read_i32(FW_CFG_NB_CPUS) >= 2 && has_pmu())
+        powermac33_machine = 1;
+}
+
+int is_powermac33(void)
+{
+    return powermac33_machine;
 }
 
 static const pci_arch_t known_arch[] = {
@@ -343,17 +370,105 @@ cpu_generic_init(const struct cpudef *cpu)
 }
 
 static void
+cpu_add_reg_property(unsigned long reg)
+{
+    PUSH(reg);
+    fword("encode-int");
+    push_str("reg");
+    fword("property");
+}
+
+static void
+cpu_add_flag_property(const char *name)
+{
+    PUSH(0);
+    PUSH(0);
+    fword("encode-bytes");
+    push_str(name);
+    fword("property");
+}
+
+static void
+cpu_g4_add_l2_cache(void)
+{
+    phandle_t l2cache;
+
+    fword("new-device");
+
+    push_str("l2-cache");
+    fword("device-name");
+
+    push_str("cache");
+    fword("device-type");
+
+    PUSH(0x00100000);
+    fword("encode-int");
+    push_str("i-cache-size");
+    fword("property");
+
+    PUSH(0x00100000);
+    fword("encode-int");
+    push_str("d-cache-size");
+    fword("property");
+
+    PUSH(0x2000);
+    fword("encode-int");
+    push_str("i-cache-sets");
+    fword("property");
+
+    PUSH(0x2000);
+    fword("encode-int");
+    push_str("d-cache-sets");
+    fword("property");
+
+    PUSH(0x40);
+    fword("encode-int");
+    push_str("i-cache-line-size");
+    fword("property");
+
+    PUSH(0x40);
+    fword("encode-int");
+    push_str("d-cache-line-size");
+    fword("property");
+
+    PUSH(0x0ee6b280);
+    fword("encode-int");
+    push_str("clock-frequency");
+    fword("property");
+
+    l2cache = get_cur_dev();
+    fword("finish-device");
+
+    PUSH(l2cache);
+    fword("encode-int");
+    push_str("l2-cache");
+    fword("property");
+}
+
+static void
+cpu_g4_add_extras(void)
+{
+    cpu_add_flag_property("altivec");
+    cpu_add_flag_property("graphics");
+    cpu_add_flag_property("performance-monitor");
+    cpu_add_flag_property("data-streams");
+
+    PUSH(0xb9000000);
+    fword("encode-int");
+    push_str("l2cr");
+    fword("property");
+
+    cpu_g4_add_l2_cache();
+}
+
+static void
 cpu_add_pir_property(void)
 {
     unsigned long pir;
 
     asm("mfspr %0, 1023\n"
         : "=r"(pir) :);
-    PUSH(pir);
-    printk("Pir = %lu \n", pir);
-    fword("encode-int");
-    push_str("reg");
-    fword("property");
+    cpu_add_reg_property(pir);
 }
 
 static void
@@ -382,9 +497,13 @@ static void
 cpu_g4_init(const struct cpudef *cpu)
 {
     cpu_generic_init(cpu);
-    cpu_add_pir_property();
 
-    //fword("finish-device");
+    if (smp_cpu_index >= 0)
+        cpu_add_reg_property(smp_cpu_index);
+    else
+        cpu_add_reg_property(0);
+
+    cpu_g4_add_extras();
 }
 
 #ifdef CONFIG_PPC_64BITSUPPORT
@@ -959,6 +1078,8 @@ arch_of_init(void)
 
     printk("CPUs: %x\n", temp);
 
+    detect_powermac33();
+
     ram_size = ofmem->ramsize;
 
     printk("Memory: %lldM\n", ram_size / 1024 / 1024);
@@ -1017,26 +1138,49 @@ arch_of_init(void)
     case ARCH_PREP:
     default:
 
-        /* model */
+        if (is_powermac33()) {
+            /* Power Macintosh G4 500 DP (Gigabit) */
 
-        push_str("PowerMac3,1");
-        fword("model");
+            push_str("PowerMac3,3");
+            fword("model");
 
-        /* compatible */
+            push_str("PowerMac3,3");
+            fword("encode-string");
+            push_str("MacRISC");
+            fword("encode-string");
+            fword("encode+");
+            push_str("Power Macintosh");
+            fword("encode-string");
+            fword("encode+");
+            push_str("compatible");
+            fword("property");
 
-        push_str("PowerMac3,1");
-        fword("encode-string");
-        push_str("MacRISC");
-        fword("encode-string");
-        fword("encode+");
-        push_str("MacRISC2");
-        fword("encode-string");
-        fword("encode+");
-        push_str("Power Macintosh");
-        fword("encode-string");
-        fword("encode+");
-        push_str("compatible");
-        fword("property");
+            PUSH(0xff06);
+            fword("encode-int");
+            push_str("color-code");
+            fword("property");
+        } else {
+            /* model */
+
+            push_str("PowerMac3,1");
+            fword("model");
+
+            /* compatible */
+
+            push_str("PowerMac3,1");
+            fword("encode-string");
+            push_str("MacRISC");
+            fword("encode-string");
+            fword("encode+");
+            push_str("MacRISC2");
+            fword("encode-string");
+            fword("encode+");
+            push_str("Power Macintosh");
+            fword("encode-string");
+            fword("encode+");
+            push_str("compatible");
+            fword("property");
+        }
 
         /* misc */
 
@@ -1074,26 +1218,41 @@ arch_of_init(void)
     push_str("reg");
     fword("property");
 
-for (int i= 0; i<temp; i++) {
-    cpu = id_cpu();
-    cpu->initfn(cpu);
+    push_str("/cpus");
+    fword("find-device");
 
-    printk("CPU type %s\n", cpu->name);
-    snprintf(buf, sizeof(buf), "/cpus/%s", cpu->name);
-    PUSH(i);
+    PUSH(temp);
     fword("encode-int");
-    push_str("reg");
+    push_str("#cpus");
     fword("property");
-    if (i!=0){
-        push_str("stopped");
-        fword("encode-string");
-        push_str("state");
-        fword("property");
+
+    {
+        phandle_t boot_cpu = 0;
+        int i;
+
+        for (i = 0; i < (int)temp; i++) {
+            smp_cpu_index = (temp > 1) ? i : -1;
+            cpu = id_cpu();
+            cpu->initfn(cpu);
+
+            printk("CPU type %s\n", cpu->name);
+
+            if (i != 0) {
+                push_str("stopped");
+                fword("encode-string");
+                push_str("state");
+                fword("property");
+            }
+
+            boot_cpu = get_cur_dev();
+            fword("finish-device");
         }
-    fword("finish-device");
-}
-    ofmem_register(find_dev("/memory"), find_dev(buf));
-    node_methods_init(buf);
+        smp_cpu_index = -1;
+
+        snprintf(buf, sizeof(buf), "/cpus/%s", cpu->name);
+        ofmem_register(find_dev("/memory"), boot_cpu);
+        node_methods_init(buf);
+    }
 
 #ifdef CONFIG_RTAS
     /* OldWorld Macs don't have an /rtas node. */
