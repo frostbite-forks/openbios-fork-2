@@ -50,6 +50,7 @@ struct cpudef {
 };
 
 static uint16_t machine_id = 0;
+static int smp_cpu_index = 0;
 
 extern void unexpected_excep(int vector);
 
@@ -74,6 +75,7 @@ enum {
     ARCH_MAC99,
     ARCH_HEATHROW,
     ARCH_MAC99_U3,
+    ARCH_MAC99_P33,
 };
 
 int is_apple(void)
@@ -89,7 +91,8 @@ int is_oldworld(void)
 int is_newworld(void)
 {
     return (machine_id == ARCH_MAC99) ||
-           (machine_id == ARCH_MAC99_U3);
+           (machine_id == ARCH_MAC99_U3) ||
+           (machine_id == ARCH_MAC99_P33);
 }
 
 #define CORE99_VIA_CONFIG_CUDA     0x0
@@ -159,6 +162,26 @@ static const pci_arch_t known_arch[] = {
         .cfg_addr = 0xf0800000,
         .cfg_data = 0xf0c00000,
         .cfg_base = 0xf0000000,
+        .cfg_len = 0x02000000,
+        .host_pci_base = 0x0,
+        .pci_mem_base = 0x80000000,
+        .mem_len = 0x10000000,
+        .io_base = 0xf2000000,
+        .io_len = 0x00800000,
+        .host_ranges = {
+            { .type = IO_SPACE, .parentaddr = 0, .childaddr = 0xf2000000, .len = 0x00800000 },
+            { .type = MEMORY_SPACE_32, .parentaddr = 0x80000000, .childaddr = 0x80000000, .len = 0x10000000 },
+            { .type = 0, .parentaddr = 0, .childaddr = 0, .len = 0 }
+         },
+        .irqs = { 0x1b, 0x1c, 0x1d, 0x1e }
+    },
+    [ARCH_MAC99_P33] = {
+        .name = "MAC99_P33",
+        .vendor_id = PCI_VENDOR_ID_APPLE,
+        .device_id = PCI_DEVICE_ID_APPLE_UNI_N_PCI,
+        .cfg_addr = 0xf2800000,
+        .cfg_data = 0xf2c00000,
+        .cfg_base = 0xf2000000,
         .cfg_len = 0x02000000,
         .host_pci_base = 0x0,
         .pci_mem_base = 0x80000000,
@@ -383,6 +406,100 @@ cpu_g4_init(const struct cpudef *cpu)
 {
     cpu_generic_init(cpu);
     cpu_add_pir_property();
+
+    //fword("finish-device");
+}
+
+static void
+cpu_g4_p33_init(const struct cpudef *cpu)
+{
+    phandle_t l2ph;
+
+    cpu_generic_init(cpu);
+
+    PUSH(smp_cpu_index);
+    fword("encode-int");
+    push_str("reg");
+    fword("property");
+
+    /* AltiVec / G4 feature flags */
+    PUSH(0); PUSH(0);
+    fword("encode-bytes");
+    push_str("altivec");
+    fword("property");
+
+    PUSH(0); PUSH(0);
+    fword("encode-bytes");
+    push_str("graphics");
+    fword("property");
+
+    PUSH(0); PUSH(0);
+    fword("encode-bytes");
+    push_str("performance-monitor");
+    fword("property");
+
+    PUSH(0); PUSH(0);
+    fword("encode-bytes");
+    push_str("data-streams");
+    fword("property");
+
+    /* L2CR register value from real hardware */
+    PUSH(0xb9000000);
+    fword("encode-int");
+    push_str("l2cr");
+    fword("property");
+
+    /* L2 cache child node — 1 MB per CPU, 238 MHz */
+    fword("new-device");
+
+    push_str("l2-cache");
+    fword("device-name");
+
+    push_str("cache");
+    fword("device-type");
+
+    PUSH(0x00100000);
+    fword("encode-int");
+    push_str("i-cache-size");
+    fword("property");
+
+    PUSH(0x00100000);
+    fword("encode-int");
+    push_str("d-cache-size");
+    fword("property");
+
+    PUSH(0x2000);
+    fword("encode-int");
+    push_str("i-cache-sets");
+    fword("property");
+
+    PUSH(0x2000);
+    fword("encode-int");
+    push_str("d-cache-sets");
+    fword("property");
+
+    PUSH(0x40);
+    fword("encode-int");
+    push_str("i-cache-line-size");
+    fword("property");
+
+    PUSH(0x40);
+    fword("encode-int");
+    push_str("d-cache-line-size");
+    fword("property");
+
+    PUSH(0x0ee6b280);
+    fword("encode-int");
+    push_str("clock-frequency");
+    fword("property");
+
+    l2ph = get_cur_dev();
+    fword("finish-device");
+
+    PUSH(l2ph);
+    fword("encode-int");
+    push_str("l2-cache");
+    fword("property");
 
     //fword("finish-device");
 }
@@ -931,6 +1048,7 @@ arch_of_init(void)
     switch (machine_id) {
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
+    case ARCH_MAC99_P33:
         /* The NewWorld NVRAM is not located in the MacIO device */
         macio_nvram_init("/", 0);
         ob_pci_init();
@@ -1012,6 +1130,33 @@ arch_of_init(void)
         fword("property");
         break;
 
+    case ARCH_MAC99_P33:
+
+        /* Power Macintosh G4 500 DP (Gigabit Ethernet) */
+
+        push_str("PowerMac3,3");
+        fword("model");
+
+        push_str("PowerMac3,3");
+        fword("encode-string");
+        push_str("MacRISC");
+        fword("encode-string");
+        fword("encode+");
+        push_str("Power Macintosh");
+        fword("encode-string");
+        fword("encode+");
+        push_str("compatible");
+        fword("property");
+
+        push_str("bootrom");
+        fword("device-type");
+
+        PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
+        fword("encode-int");
+        push_str("clock-frequency");
+        fword("property");
+        break;
+
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
     case ARCH_PREP:
@@ -1075,15 +1220,21 @@ arch_of_init(void)
     fword("property");
 
 for (int i= 0; i<temp; i++) {
+    smp_cpu_index = i;
     cpu = id_cpu();
-    cpu->initfn(cpu);
+    if (machine_id == ARCH_MAC99_P33)
+        cpu_g4_p33_init(cpu);
+    else
+        cpu->initfn(cpu);
 
     printk("CPU type %s\n", cpu->name);
     snprintf(buf, sizeof(buf), "/cpus/%s", cpu->name);
-    PUSH(i);
-    fword("encode-int");
-    push_str("reg");
-    fword("property");
+    if (machine_id != ARCH_MAC99_P33) {
+        PUSH(i);
+        fword("encode-int");
+        push_str("reg");
+        fword("property");
+    }
     if (i!=0){
         push_str("stopped");
         fword("encode-string");
@@ -1092,6 +1243,7 @@ for (int i= 0; i<temp; i++) {
         }
     fword("finish-device");
 }
+    smp_cpu_index = 0;
     ofmem_register(find_dev("/memory"), find_dev(buf));
     node_methods_init(buf);
 
@@ -1100,6 +1252,7 @@ for (int i= 0; i<temp; i++) {
     switch (machine_id) {
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
+    case ARCH_MAC99_P33:
         if (!(ph = find_dev("/rtas"))) {
             printk("Warning: No /rtas node\n");
         } else {
