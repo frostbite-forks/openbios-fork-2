@@ -276,15 +276,25 @@ headerless
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
-  \ Is the VGA NDRV driver enabled? (PPC only)
-  " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
-    decode-string 2swap 2drop    \ ( addr len )
-    s" true" drop -rot comp 0= if
-      \ Embed NDRV driver via fw-cfg if it exists
-      " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
-        encode-string " driver,AAPL,MacOS,PowerPC" property
+  \ Install NDRV only if not already provided by the PCI ROM FCode.
+  \ When rage128pro.rom is present, its FCode runs first and installs the
+  \ real ATI NDRV as driver,AAPL,MacOS,PowerPC.  We must not overwrite it
+  \ with the VBE-only qemu_vga.ndrv stub or the ATI 3D extensions will
+  \ lose the real NDRV and fall back to software rendering.
+  " driver,AAPL,MacOS,PowerPC" get-package-property if
+    \ Property not yet set — check vga-ndrv? and install from fw-cfg
+    " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
+      decode-string 2swap 2drop    \ ( addr len )
+      s" true" drop -rot comp 0= if
+        \ Embed NDRV driver via fw-cfg if it exists
+        " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
+          encode-string " driver,AAPL,MacOS,PowerPC" property
+        then
       then
     then
+  else
+    \ Property already set by ROM FCode — leave the real NDRV in place
+    2drop
   then
 
   ['] qemu-vga-driver-install is-install

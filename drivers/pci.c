@@ -1066,11 +1066,20 @@ int vga_config_cb (const pci_config_t *config)
                     }
             }
 
-            if (!rom_fcode_executed) {
-                    /* No ROM FCode available — fall back to the built-in
-                     * vga-driver-fcode (VBE display only, no ATY properties). */
-                    feval("['] vga-driver-fcode 2 cells + 1 byte-load");
-            }
+            /*
+             * Always run vga-driver-fcode for VBE display setup regardless of
+             * whether the ROM FCode ran.  The ROM FCode may have failed early
+             * (unknown token, checksum abort) or hung before touching any MMIO;
+             * without vga-driver-fcode the display is never initialized and the
+             * guest shows "Guest has not initialized the display (yet)".
+             * vga-driver-fcode is also responsible for fb8-install which
+             * registers the framebuffer with QEMU's console subsystem.
+             * ATY,* properties created by the ROM FCode (if any) persist since
+             * vga-driver-fcode only adds new properties, not removes them.
+             * The NDRV is handled separately: vga.fs skips installing
+             * qemu_vga.ndrv when driver,AAPL,MacOS,PowerPC already exists.
+             */
+            feval("['] vga-driver-fcode 2 cells + 1 byte-load");
 #else
             /* Currently we don't read FCode from the hardware but execute
              * it directly */
