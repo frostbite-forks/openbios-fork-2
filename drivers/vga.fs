@@ -276,6 +276,29 @@ headerless
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
+  \ ATY,* properties required by the real ATI Rage 128 Pro NDRV.
+  \ The NDRV calls RegistryPropertyGet for these before touching any MMIO;
+  \ if any are missing it aborts immediately (no MMIO, RAVE stays dark).
+  \ Only set each property if the PCI ROM FCode didn't already create it.
+  \
+  \ Units (all clocks in kHz):
+  \   ATY,Flags   — 0 = PCI card, no AGP, no DFP/DVI (safe default)
+  \   ATY,RefCLK  — 28636 kHz = 28.636 MHz reference crystal (Rage 128 PCI)
+  \   ATY,MCLK    — 100000 kHz = 100 MHz memory clock (conservative)
+  \   ATY,SCLK    — 100000 kHz = 100 MHz engine clock (conservative)
+  " ATY,Flags" get-package-property if
+    h# 0 encode-int " ATY,Flags" property
+  else 2drop then
+  " ATY,RefCLK" get-package-property if
+    h# 6fdc encode-int " ATY,RefCLK" property
+  else 2drop then
+  " ATY,MCLK" get-package-property if
+    h# 186a0 encode-int " ATY,MCLK" property
+  else 2drop then
+  " ATY,SCLK" get-package-property if
+    h# 186a0 encode-int " ATY,SCLK" property
+  else 2drop then
+
   \ Install NDRV only if not already provided by the PCI ROM FCode.
   \ When rage128pro.rom is present, its FCode runs first and installs the
   \ real ATI NDRV as driver,AAPL,MacOS,PowerPC.  We must not overwrite it
