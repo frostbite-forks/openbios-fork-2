@@ -253,17 +253,15 @@ headerless
 
     frame-buffer-adr encode-int " address" property
 
-    \ AAPL,address: three-entry array matching real ATI Rage 128 PCI OF ROM.
-    \ Index 0 = BAR0 (framebuffer), index 1 = 0 (IO BAR not memory-mapped),
-    \ index 2 = BAR2 (MMIO registers).
-    \ The NDRV dereferences index 1 as a kernel virtual address.  On real
-    \ hardware that address is pre-mapped via inherited OF BAT registers;
-    \ in QEMU+OpenBIOS the mapping is not inherited, so index 1 must be 0
-    \ so the NDRV skips the direct-dereference path.  The ARM (ATI Resource
-    \ Manager) then falls back to Mac OS 9 PCI Manager to map BAR2, which
-    \ correctly sets up page-table entries with cache-inhibit+guarded bits.
+    \ AAPL,address layout for ATI Rage 128 PCI:
+    \   [0] = BAR0 mapped (framebuffer)
+    \   [1] = BAR2 mapped (MMIO registers) — ARM reads this for 3D capability probe
+    \   [2] = BAR2 mapped again — NDRV reads this for VBE/display-mode init
+    \ The NDRV maps BAR2 (via AAPL[2]) before the ARM runs, establishing the
+    \ kernel page-table entry for 0x84000000.  When the ARM then dereferences
+    \ AAPL[1] as a kernel virtual address the mapping is already in place.
     frame-buffer-adr encode-int
-    0 encode-int encode+
+    mmio-addr encode-int encode+
     mmio-addr encode-int encode+
     " AAPL,address" property
 
