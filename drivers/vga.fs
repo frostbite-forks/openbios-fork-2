@@ -155,6 +155,11 @@ defer vbe-iow!
   cfg-bar2 pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
     " pci-map-in" $call-parent
     to mmio-addr
+    \ DIAGNOSTIC: read CONFIG_STAT0 (offset 0x1730) to verify BAR2 mapping
+    \ reaches QEMU's ati_mm handler.  Shows as "MMIO read[0] offset=0x1730"
+    \ in unimp.log if the tracer is working; if absent the address chain is
+    \ broken and no Mac OS 9 MMIO access will be visible either.
+    mmio-addr h# 1730 + l@ drop
   then
 ;
 
@@ -276,15 +281,48 @@ headerless
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
-  \ Is the VGA NDRV driver enabled? (PPC only)
-  " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
-    decode-string 2swap 2drop    \ ( addr len )
-    s" true" drop -rot comp 0= if
-      \ Embed NDRV driver via fw-cfg if it exists
-      " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
-        encode-string " driver,AAPL,MacOS,PowerPC" property
+  \ ATY,* properties required by the real ATI Rage 128 Pro NDRV.
+  \ The NDRV calls RegistryPropertyGet for these before touching any MMIO;
+  \ if any are missing it aborts immediately (no MMIO, RAVE stays dark).
+  \ Only set each property if the PCI ROM FCode didn't already create it.
+  \
+  \ Units (all clocks in kHz):
+  \   ATY,Flags   — 0 = PCI card, no AGP, no DFP/DVI (safe default)
+  \   ATY,RefCLK  — 28636 kHz = 28.636 MHz reference crystal (Rage 128 PCI)
+  \   ATY,MCLK    — 100000 kHz = 100 MHz memory clock (conservative)
+  \   ATY,SCLK    — 100000 kHz = 100 MHz engine clock (conservative)
+  " ATY,Flags" get-package-property if
+    h# 0 encode-int " ATY,Flags" property
+  else 2drop then
+  " ATY,RefCLK" get-package-property if
+    h# 6fdc encode-int " ATY,RefCLK" property
+  else 2drop then
+  " ATY,MCLK" get-package-property if
+    h# 186a0 encode-int " ATY,MCLK" property
+  else 2drop then
+  " ATY,SCLK" get-package-property if
+    h# 186a0 encode-int " ATY,SCLK" property
+  else 2drop then
+
+  \ Install NDRV only if not already provided by the PCI ROM FCode.
+  \ When rage128pro.rom is present, its FCode runs first and installs the
+  \ real ATI NDRV as driver,AAPL,MacOS,PowerPC.  We must not overwrite it
+  \ with the VBE-only qemu_vga.ndrv stub or the ATI 3D extensions will
+  \ lose the real NDRV and fall back to software rendering.
+  " driver,AAPL,MacOS,PowerPC" get-package-property if
+    \ Property not yet set — check vga-ndrv? and install from fw-cfg
+    " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
+      decode-string 2swap 2drop    \ ( addr len )
+      s" true" drop -rot comp 0= if
+        \ Embed NDRV driver via fw-cfg if it exists
+        " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
+          encode-string " driver,AAPL,MacOS,PowerPC" property
+        then
       then
     then
+  else
+    \ Property already set by ROM FCode — leave the real NDRV in place
+    2drop
   then
 
   ['] qemu-vga-driver-install is-install

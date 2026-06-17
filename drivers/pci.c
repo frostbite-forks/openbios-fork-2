@@ -1024,9 +1024,8 @@ int vga_config_cb (const pci_config_t *config)
                     ph = get_cur_dev();
 
                     if (rom_size >= 8) {
-                            const char *p;
+                            const char *p = (const char *)rom;
 
-                            p = (const char *)rom;
                             if (p[0] == 'N' && p[1] == 'D' && p[2] == 'R' && p[3] == 'V') {
                                     size = *(uint32_t*)(p + 4);
                                     set_property(ph, "driver,AAPL,MacOS,PowerPC",
@@ -1035,14 +1034,55 @@ int vga_config_cb (const pci_config_t *config)
                                        p[2] == 'y' && p[3] == '!') {
                                     set_property(ph, "driver,AAPL,MacOS,PowerPC",
                                                  p, rom_size);
+                            } else if ((unsigned char)p[0] == 0x55 &&
+                                       (unsigned char)p[1] == 0xAA) {
+                                    /*
+                                     * Standard PCI option ROM.  Scan the first
+                                     * kilobyte for the OF FCode magic (0xF108 =
+                                     * fcode-version3).  When found, execute the
+                                     * FCode directly via byte-load; it creates
+                                     * all ATY,* OF properties (RefCLK, MCLK,
+                                     * SCLK, Flags, …), installs the real NDRV,
+                                     * and sets up the display — making the ATI
+                                     * 3D Accelerator extension find hardware 3D.
+                                     */
+                                    unsigned int lim = rom_size < 1024u
+                                                       ? rom_size - 1u : 1023u;
+                                    unsigned int fi;
+                                    for (fi = 0; fi < lim; fi++) {
+                                            if ((unsigned char)p[fi]   == 0xF1 &&
+                                                (unsigned char)p[fi+1] == 0x08) {
+                                                    char buf[80];
+                                                    snprintf(buf, sizeof(buf),
+                                                             "0x%lx 1 byte-load",
+                                                             (unsigned long)(rom + fi));
+                                                    feval(buf);
+                                                    break;
+                                            }
+                                    }
                             }
                     }
             }
-#endif
 
+            /*
+             * Always run vga-driver-fcode for VBE display setup regardless of
+             * whether the ROM FCode ran.  The ROM FCode may have failed early
+             * (unknown token, checksum abort) or hung before touching any MMIO;
+             * without vga-driver-fcode the display is never initialized and the
+             * guest shows "Guest has not initialized the display (yet)".
+             * vga-driver-fcode is also responsible for fb8-install which
+             * registers the framebuffer with QEMU's console subsystem.
+             * ATY,* properties created by the ROM FCode (if any) persist since
+             * vga-driver-fcode only adds new properties, not removes them.
+             * The NDRV is handled separately: vga.fs skips installing
+             * qemu_vga.ndrv when driver,AAPL,MacOS,PowerPC already exists.
+             */
+            feval("['] vga-driver-fcode 2 cells + 1 byte-load");
+#else
             /* Currently we don't read FCode from the hardware but execute
              * it directly */
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
+#endif
 
 #ifdef CONFIG_MOL
             /* Install special words for Mac On Linux */
