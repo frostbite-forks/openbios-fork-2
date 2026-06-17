@@ -155,6 +155,11 @@ defer vbe-iow!
   cfg-bar2 pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
     " pci-map-in" $call-parent
     to mmio-addr
+    \ DIAGNOSTIC: read CONFIG_STAT0 (offset 0x1730) to verify BAR2 mapping
+    \ reaches QEMU's ati_mm handler.  Shows as "MMIO read[0] offset=0x1730"
+    \ in unimp.log if the tracer is working; if absent the address chain is
+    \ broken and no Mac OS 9 MMIO access will be visible either.
+    mmio-addr h# 1730 + l@ drop
   then
 ;
 
